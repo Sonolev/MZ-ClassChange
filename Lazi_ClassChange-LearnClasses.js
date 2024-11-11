@@ -1,5 +1,5 @@
 /*:
- * @author Lazislacker
+ * @author Lazislacker, Gimmer_
  * @target MZ
  * @plugindesc REQUIRES a Lazi_ClassChange plugin! Adds the ability to learn classes based on levels in other classes
  * @help
@@ -7,7 +7,7 @@
  * This plugin sdds the ability to learn classes 
  * based on levels in other classes
  * --------------
- * |Version: 1.0.0|
+ * |Version: 1.1.0|
  * --------------
  * 
  * ---------------
@@ -30,6 +30,10 @@
  * <LaziLearnableClassAND:|[classId],[level]|...> -> All of the classes must be at the specified level
  * <LaziLearnableClassOR:|[classId],[level]|...> -> At least one of the classes must be at the level
  * <LaziLearnableClassBase:[level]>
+ *
+ * =================================================================
+ * Updated by Gimmer_ to fix issue with class changing not working
+ * =================================================================
  */
 
 //------------------------------//
@@ -175,9 +179,9 @@ if (Imported.Lazi_ClassChange || Imported.Lazi_ClassChangeBasic) {
     }
 
     Lazi.Lazi_CC_LearnClasses.checkForNewClasses = function (actor) {
-        for (learnable of this.LearnableClasses) {
+        for (let learnable of this.LearnableClasses) {
             if (this.shouldShowLevels()) {
-                if (learnable.comparison.toLowerCase() == "base") {
+                if(this.isActorLevelMode()){
                     if (actor.Lazi_GetACTORMODELevel() >= learnable.requirement) {
                         this.addActorClass({
                             actorId: actor._actorId,
@@ -185,8 +189,11 @@ if (Imported.Lazi_ClassChange || Imported.Lazi_ClassChangeBasic) {
                             type: "Add"
                         })
                     }
+                }
+                else {
                     let reqsSatisfied = [];
-                    for (requirement of learnable.requirements) {
+
+                    for (let requirement of learnable.requirements) {
 
                         //If they don't have any EXP in it or don't have it, don't bother checking
                         if (actor._exp[requirement.ID] == 0 || !actor._exp[requirement.ID]) {
@@ -230,15 +237,15 @@ if (Imported.Lazi_ClassChange || Imported.Lazi_ClassChangeBasic) {
                             type: "Add"
                         })
                     }
-                } else {
-                    //All EXP should be the same so just use the current class'
-                    if (this.ClassLevelByExp(actor._classId, actor._exp[actor._classId]) >= learnable.requirements) {
-                        this.addActorClass({
-                            actorId: actor._actorId,
-                            classId: learnable.ID,
-                            type: "Add"
-                        });
-                    }
+                }
+            }
+            else{
+                if (this.ClassLevelByExp(actor._classId, actor._exp[actor._classId]) >= learnable.requirements) {
+                    this.addActorClass({
+                        actorId: actor._actorId,
+                        classId: learnable.ID,
+                        type: "Add"
+                    });
                 }
             }
         }
