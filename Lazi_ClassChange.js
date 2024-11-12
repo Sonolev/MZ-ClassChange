@@ -1,5 +1,5 @@
 /*:
- * @author Lazislacker
+ * @author Lazislacker, Gimmer_
  * @target MZ
  * @plugindesc Class Change System with 3 different implementations.
  * @help
@@ -7,9 +7,11 @@
  * switch between them. There are currenty 3 modes: Shared EXP, 
  * Individual Class EXP, and Actor Mode.
  * --------------
- * |Version: 1.1.3|
+ * |Version: 1.1.4|
  * --------------
- * 
+ *
+ * Updated to allow denying classes
+ *
  * ---------------
  * |Documentation|
  * ---------------
@@ -69,12 +71,14 @@
  * =>Notetags<=
  * To add classes that you want an actor to have from the start of the game use 
  * the following two notetags within the actor's note field:
- * *<LaziGiveClass: [classID]> -> This notetag will add the class to the actor 
- *  at the start of a new game.
+ * *<LaziDenyClass: [classID]> -> This notetag will prevent this actor from ever
+ *  having this class added, even if it is directly added by another note tag.
  * *<LaziGiveClassDisable: [classID] -> This notetag will add the class to the 
  *  actor at the start of a new game in a disabled state. It will appear in
  *  the actor's class list but be unselectable. The Modify Actor Classes plugin 
  *  command can be used to enable this class at a different time.
+* *<LaziGiveClass: [classID]> -> This notetag will add the class to the actor
+ *  at the start of a new game.
  * 
  * ==>Examples<==
  * *<LaziGiveClass: 1> will give the Actor class ID 1
@@ -344,9 +348,16 @@ Lazi.ClassChange.addActorClass = function (args) {
         Lazi.Utils.DebugLog("ERROR!:Cannot have an actor or class with an ID of -1");
         return;
     }
-    let currentClasses = $gameActors._data[args.actorId].LaziClassChange_classes;
-    if (args.type == "Add") {
-        for (currentClass of currentClasses) {
+    let actor = $gameActors.actor(parseInt(args.actorId));
+    let classId = parseInt(args.classId);
+    let currentClasses = actor.LaziClassChange_classes;
+    if (args.type === "Add") {
+        if(actor.LaziClassChange_unavailableClasses.indexOf(classId) > -1){
+            Lazi.Utils.DebugLog("ERROR!:attempted to add a class that's disabled for this actor");
+            return;
+        }
+
+        for (let currentClass of currentClasses) {
             if (currentClass.classID == args.classId) {
                 if (currentClass.enabled) {
                     Lazi.Utils.DebugLog("ERROR!: Class already in Actor's class list and enabled");
@@ -358,8 +369,8 @@ Lazi.ClassChange.addActorClass = function (args) {
         }
         currentClasses.push(new Lazi_ClassChange_ClassObject(parseInt(args.classId), 0));
     }
-    if (args.type == "Disable") {
-        for (currentClass of currentClasses) {
+    if (args.type === "Disable") {
+        for (let currentClass of currentClasses) {
             if (currentClass.classID == args.classId) {
                 if (currentClass.enabled) {
                     Lazi.Utils.DebugLog("ERROR!: Class is already disabled!");
@@ -370,14 +381,13 @@ Lazi.ClassChange.addActorClass = function (args) {
             }
         }
     }
-    if (args.type == "Remove") {
+    if (args.type === "Remove") {
         Lazi.Utils.DebugLog("Removing the class with ID " + args.classId);
 
         //Uh oh, we are currently that class. We should bump ourselves to something else.
-        let actor = $gameActors_.data[args.actorId]
         if (actor._classId == args.classId) {
             //Uh oh. We only have one class and it's this class, do nothing.
-            if (actor.LaziClassChange_classes.length == 1 && actor.LaziClassChange_classes[0].classID == actor._classId) {
+            if (actor.LaziClassChange_classes.length === 1 && actor.LaziClassChange_classes[0].classID == actor._classId) {
                 return;
             }
             if (actor.LaziClassChange_classes[0].classID != actor._classId) {
@@ -390,7 +400,7 @@ Lazi.ClassChange.addActorClass = function (args) {
                 Lazi.ClassChange.performClassSwap(actor, newClass.classID, newClass.classExp);
             }
         }
-        $gameActors._data[args.actorId].LaziClassChange_classes = currentClasses.filter((item) => {
+        actor.LaziClassChange_classes = currentClasses.filter((item) => {
             return item.classID != args.classId;
         })
     }
@@ -527,14 +537,14 @@ Game_Actor.prototype.Lazi_GenerateClassList = function (actorId) {
     classList.push(new Lazi_ClassChange_ClassObject(actor.classId, Lazi.ClassChange.ExpByClassLevel(actor.classId, actor.initialLevel)))
     let matches = note.matchAll(/<\s*Lazi\s?Give\s?Class:\s*(.+)\s*>/ig)
     if (matches) {
-        for (match of matches) {
+        for (let match of matches) {
             let subMatches = match[0].matchAll(/(\d+),?/g)
-            for (subMatch of subMatches) {
+            for (let subMatch of subMatches) {
                 //We already have it, don't add it.
                 let alreadyAdded = classList.filter((entry) => {
                     return (entry.classID == parseInt(subMatch[1]))
                 }).length != 0
-                if ((parseInt(subMatch[1]) == actor._classId) || alreadyAdded) {
+                if ((parseInt(subMatch[1]) == actor._classId) || alreadyAdded || this.LaziClassChange_unavailableClasses.indexOf(parseInt[subMatch[1]]) > -1) {
                     continue;
                 }
 
@@ -544,14 +554,14 @@ Game_Actor.prototype.Lazi_GenerateClassList = function (actorId) {
     }
     let DisableMatches = note.matchAll(/<\s*Lazi\s?Give\s?Class\s?Disable:\s*(.+)\s*>/ig)
     if (DisableMatches) {
-        for (match of DisableMatches) {
+        for (let match of DisableMatches) {
             let subMatches = match[0].matchAll(/(\d+),?/g)
-            for (subMatch of subMatches) {
+            for (let subMatch of subMatches) {
                 //We already have it, don't add it.
                 let alreadyAdded = classList.filter((entry) => {
                     return (entry.classID == parseInt(subMatch[1]))
                 }).length != 0
-                if ((parseInt(subMatch[1]) == actor._classId) || alreadyAdded) {
+                if ((parseInt(subMatch[1]) == actor._classId) || alreadyAdded || this.LaziClassChange_unavailableClasses.indexOf(parseInt[subMatch[1]]) > -1) {
                     continue;
                 }
                 classList.push(new Lazi_ClassChange_ClassObject(parseInt(subMatch[1]), 0, false));
@@ -575,6 +585,29 @@ Game_Actor.prototype.Lazi_GenerateClassList = function (actorId) {
             this.LaziClassChange_ACTORMODECLASS = classList[0];
         } else {
             this.LaziClassChange_ACTORMODECLASS = null; //We're gonna have issues....
+        }
+    }
+    return classList;
+}
+
+Game_Actor.prototype.Lazi_GenerateClassUnavailableList = function(actorId){
+    const actor = $dataActors[actorId]
+    const note = actor.note;
+    let classList = [];
+    let DenyMatches = note.matchAll(/<\s*Lazi\s?Deny\s?Class\s?:\s*(.+)\s*>/ig)
+    if (DenyMatches) {
+        for (let match of DenyMatches) {
+            let subMatches = match[0].matchAll(/(\d+),?/g)
+            for (let subMatch of subMatches) {
+                //We already have it, don't add it.
+                let alreadyAdded = classList.filter((entry) => {
+                    return (entry.classID == parseInt(subMatch[1]))
+                }).length != 0
+                if ((parseInt(subMatch[1]) == actor._classId) || alreadyAdded) {
+                    continue;
+                }
+                classList.push(parseInt(subMatch[1]));
+            }
         }
     }
     return classList;
@@ -622,6 +655,7 @@ Game_Actor.prototype.Lazi_StatGainLevelUp = function (originalLvl) {
 Lazi.ClassChange.GameActor_initMembers = Game_Actor.prototype.initMembers;
 Game_Actor.prototype.initMembers = function () {
     Lazi.ClassChange.GameActor_initMembers.apply(this, arguments);
+    this.LaziClassChange_unavailableClasses = [];
     this.LaziClassChange_classes = [];
     if (Lazi.ClassChange.isActorLevelMode()) {
         this.LaziClassChange_ACTORMODECLASS = null;
@@ -629,10 +663,14 @@ Game_Actor.prototype.initMembers = function () {
             this.laziClassChange_params = [];
         }
     }
+
 }
 
 Lazi.ClassChange.GameActor_setup = Game_Actor.prototype.setup;
 Game_Actor.prototype.setup = function (actorId) {
+    if (this.LaziClassChange_unavailableClasses == undefined || this.LaziClassChange_unavailableClasses.length == 0) {
+        this.LaziClassChange_unavailableClasses = this.Lazi_GenerateClassUnavailableList(actorId);
+    }
     //We need to generate a list using their notetag
     if (this.LaziClassChange_classes == undefined || this.LaziClassChange_classes.length == 0) {
         this.LaziClassChange_classes = this.Lazi_GenerateClassList(actorId);
@@ -830,10 +868,6 @@ Scene_Menu.prototype.onPersonalOk = function () {
 //------------------------------//
 function Lazi_Scene_ClassChange() {
     this.initialize(...arguments);
-}
-
-Lazi_Scene_ClassChange.prototype.initialize = function () {
-
 }
 
 Lazi_Scene_ClassChange.prototype = Object.create(Scene_ItemBase.prototype);

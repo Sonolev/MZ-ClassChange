@@ -111,7 +111,7 @@ if (Imported.Lazi_ClassChange || Imported.Lazi_ClassChangeBasic) {
                 //AND
                 let matches = note.matchAll(/<\s*Lazi\s?Learnable\s?ClassAND[:]?\s*(.+)\s*>/ig)
                 if (matches) {
-                    for (match of matches) {
+                    for (let match of matches) {
 
                         //Grab our requirements and create a condition object
                         let andpairs = match[1];
@@ -132,7 +132,7 @@ if (Imported.Lazi_ClassChange || Imported.Lazi_ClassChangeBasic) {
                 //OR
                 matches = note.matchAll(/<\s*Lazi\s?Learnable\s?ClassOR[:]?\s*(.+)\s*>/ig)
                 if (matches) {
-                    for (match of matches) {
+                    for (let match of matches) {
 
                         //Grab our requirements and create a condition object
                         let andpairs = match[1];
@@ -140,7 +140,7 @@ if (Imported.Lazi_ClassChange || Imported.Lazi_ClassChangeBasic) {
 
                         //Get each of our requirements and create a requirement object for it
                         let pairs = andpairs.matchAll(/\|\s*(\d+)\s*,\s*(\d+)\s*\|/ig)
-                        for (pair of pairs) {
+                        for (let pair of pairs) {
                             let newReq = new Lazi_ClassChange_ClassObjectLearnConditionRequirement(pair[1], pair[2]);
                             newLearnCondition.requirements.push(newReq);
                         }
@@ -152,9 +152,9 @@ if (Imported.Lazi_ClassChange || Imported.Lazi_ClassChangeBasic) {
             }
             //If we're in shared level mode we expect to see LaziLearnableClass tags.
             else {
-                matches = note.matchAll(/<\s*Lazi\s?Learnable\s?Class[:]?\s*(\d+)\s*>/ig)
+                let matches = note.matchAll(/<\s*Lazi\s?Learnable\s?Class[:]?\s*(\d+)\s*>/ig)
                 if (matches) {
-                    for (match of matches) {
+                    for (let match of matches) {
                         let level = match[1];
                         let newLearnCondition = new Lazi_ClassChange_ClassObjectLearnCondition(parseInt(level), _class.id);
 
@@ -164,9 +164,9 @@ if (Imported.Lazi_ClassChange || Imported.Lazi_ClassChangeBasic) {
                 }
             }
             if (this.isActorLevelMode()) {
-                matches = note.matchAll(/<\s*Lazi\s?Learnable\s?ClassBase[:]?\s*(\d+)\s*>/ig)
+                let matches = note.matchAll(/<\s*Lazi\s?Learnable\s?ClassBase[:]?\s*(\d+)\s*>/ig)
                 if (matches) {
-                    for (match of matches) {
+                    for (let match of matches) {
                         let level = match[1];
                         let newLearnCondition = new Lazi_ClassChange_ClassObjectLearnCondition(parseInt(level), _class.id, "BASE");
 
