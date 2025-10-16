@@ -1,5 +1,5 @@
 /*:
- * @author Lazislacker, Gimmer_
+ * @author Lazislacker, Gimmer_, Sono
  * @target MZ
  * @plugindesc Class Change System with 3 different implementations.
  * @help
@@ -7,10 +7,11 @@
  * switch between them. There are currenty 3 modes: Shared EXP, 
  * Individual Class EXP, and Actor Mode.
  * --------------
- * |Version: 1.1.4|
+ * |Version: 1.1.5|
  * --------------
  *
- * Updated to allow denying classes
+ * Updated to allow Icon Add on classes with Note
+ * Updated Fix Max Hp and Mp
  *
  * ---------------
  * |Documentation|
@@ -77,16 +78,18 @@
  *  actor at the start of a new game in a disabled state. It will appear in
  *  the actor's class list but be unselectable. The Modify Actor Classes plugin 
  *  command can be used to enable this class at a different time.
-* *<LaziGiveClass: [classID]> -> This notetag will add the class to the actor
+ * *<LaziGiveClass: [classID]> -> This notetag will add the class to the actor
  *  at the start of a new game.
- * 
+ * *<LaziIcon: iconId> -> This notetag will add a icon in classe system.
+ *
  * ==>Examples<==
  * *<LaziGiveClass: 1> will give the Actor class ID 1
  * *<LaziGiveClass: 1,5,7,4> will give the Actor classes 1, 5, 7, and 4
  * *<LaziGiveClassDisable: 1> will give the actor class ID 1 in a disabled form
  * *<LaziGiveClassDisable: 1,5,7> will give the actor classes 1, 5, and 7 in a disabled
- *  form.
- * 
+ *
+ * *<LaziIcon: 64> give the classe a icon
+ *
  * =>Plugin Commands<=
  * Classes can also be added to an actor during playtime through the use of a 
  * plugin command.
@@ -264,6 +267,8 @@
  * 
  */
 
+
+
 //------------------------------//
 //      Boilerplate/General     //
 //------------------------------//
@@ -316,7 +321,7 @@ Lazi.ClassChange.initializePluginCommands = function () {
 
 Lazi.ClassChange.initializeParameters = function () {
     Lazi.Utils.DebugLog("Lazi_ClassChange: Initializing Parameters");
-    const params = PluginManager.parameters("Lazi_ClassChange");
+    const params = PluginManager.parameters("Lazi_ClassChange_1.1.4");
     this.params = {};
     this.params.createMenuOption = params.menuOption;
     this.params.menuOptionText = params.menuText;
@@ -480,9 +485,10 @@ Lazi.ClassChange.ExpByClassLevel = function (classId, level) {
 
 Lazi.ClassChange.performClassSwap = function (actor, newClassID, newClassExp) {
     //Gotta stay proportional
+    var HPpercent, MPpercent;
     if (Lazi.ClassChange.shouldUsePercentages()) {
-        var HPpercent = (actor.hp) / (actor.paramBase(0)) //0 = MHP
-        var MPpercent = (actor.mp) / (actor.paramBase(1)) //1 = MMP
+        HPpercent = actor.hp / actor.mhp; // Real Max HP Value
+        MPpercent = actor.mp / actor.mmp; // Real Max MP Value
     }
     //We need to swap out the exp with the correct amount.
     if (Lazi.ClassChange.shouldShowLevels()) {
@@ -501,8 +507,8 @@ Lazi.ClassChange.performClassSwap = function (actor, newClassID, newClassExp) {
 
     //Use our already calculated percentages to change HP now that we've changed classes/levels
     if (Lazi.ClassChange.shouldUsePercentages()) {
-        actor.setHp(Math.round(actor.paramBase(0) * HPpercent));
-        actor.setMp(Math.round(actor.paramBase(1) * MPpercent));
+        actor.setHp(Math.round(actor.mhp * HPpercent));
+        actor.setMp(Math.round(actor.mmp * MPpercent));
     }
 }
 
@@ -1069,7 +1075,7 @@ Window_ClassList.prototype.drawItem = function (index) {
         this.changePaintOpacity(this.isEnabled(_class));
         this.drawItemName({
             name: className,
-            iconIndex: undefined
+            iconIndex: Lazi.ClassChange.getClassIcon(_class.classID)
         }, rect.x, rect.y, rect.width - levelWidth);
         if (Lazi.ClassChange.shouldShowLevels())
             this.drawclassLevel(_class, rect.x, rect.y, rect.width);
@@ -1104,3 +1110,12 @@ Window_ClassList.prototype.refresh = function () {
     this.makeItemList();
     Window_Selectable.prototype.refresh.call(this);
 };
+
+Lazi.ClassChange.getClassIcon = function(classId) {
+    const cls = $dataClasses[classId];
+    if (!cls) return 0;
+    const note = cls.note;
+    const match = note.match(/<\s*LaziIcon\s*:\s*(\d+)\s*>/i);
+    if (match) return parseInt(match[1]);
+    return 0; // fallback para ícone padrão
+}
