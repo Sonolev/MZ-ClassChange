@@ -321,7 +321,7 @@ Lazi.ClassChange.initializePluginCommands = function () {
 
 Lazi.ClassChange.initializeParameters = function () {
     Lazi.Utils.DebugLog("Lazi_ClassChange: Initializing Parameters");
-    const params = PluginManager.parameters("Lazi_ClassChange_1.1.4");
+    const params = PluginManager.parameters("Lazi_ClassChange");
     this.params = {};
     this.params.createMenuOption = params.menuOption;
     this.params.menuOptionText = params.menuText;
