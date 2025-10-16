@@ -10,8 +10,7 @@
  * |Version: 1.1.5|
  * --------------
  *
- * Updated to allow Icon Add on classes with Note
- * Updated Fix Max Hp and Mp
+ * Hp and Mp Fix and Icon class
  *
  * ---------------
  * |Documentation|
@@ -80,16 +79,15 @@
  *  command can be used to enable this class at a different time.
  * *<LaziGiveClass: [classID]> -> This notetag will add the class to the actor
  *  at the start of a new game.
- * *<LaziIcon: iconId> -> This notetag will add a icon in classe system.
- *
+ * *<LaziIcon: x>
+ * 
  * ==>Examples<==
  * *<LaziGiveClass: 1> will give the Actor class ID 1
  * *<LaziGiveClass: 1,5,7,4> will give the Actor classes 1, 5, 7, and 4
  * *<LaziGiveClassDisable: 1> will give the actor class ID 1 in a disabled form
  * *<LaziGiveClassDisable: 1,5,7> will give the actor classes 1, 5, and 7 in a disabled
- *
- * *<LaziIcon: 64> give the classe a icon
- *
+ *  form.
+ * 
  * =>Plugin Commands<=
  * Classes can also be added to an actor during playtime through the use of a 
  * plugin command.
@@ -266,8 +264,6 @@
  * @desc Command used to display the class change scene without using the status menu.
  * 
  */
-
-
 
 //------------------------------//
 //      Boilerplate/General     //
@@ -485,10 +481,9 @@ Lazi.ClassChange.ExpByClassLevel = function (classId, level) {
 
 Lazi.ClassChange.performClassSwap = function (actor, newClassID, newClassExp) {
     //Gotta stay proportional
-    var HPpercent, MPpercent;
     if (Lazi.ClassChange.shouldUsePercentages()) {
-        HPpercent = actor.hp / actor.mhp; // Real Max HP Value
-        MPpercent = actor.mp / actor.mmp; // Real Max MP Value
+        var HPpercent = actor.hp / actor.mhp;
+        var MPpercent = actor.mp / actor.mmp;
     }
     //We need to swap out the exp with the correct amount.
     if (Lazi.ClassChange.shouldShowLevels()) {
@@ -1083,6 +1078,15 @@ Window_ClassList.prototype.drawItem = function (index) {
     }
 };
 
+Lazi.ClassChange.getClassIcon = function(classId) {
+    const cls = $dataClasses[classId];
+    if (!cls) return 0;
+    const note = cls.note;
+    const match = note.match(/<\s*LaziIcon\s*:\s*(\d+)\s*>/i);
+    if (match) return parseInt(match[1]);
+    return 0; // fallback para ícone padrão
+}
+
 Window_ClassList.prototype.levelWidth = function () {
     if (Lazi.ClassChange.shouldShowLevels()) {
         return this.textWidth("Lvl. 000");
@@ -1111,11 +1115,3 @@ Window_ClassList.prototype.refresh = function () {
     Window_Selectable.prototype.refresh.call(this);
 };
 
-Lazi.ClassChange.getClassIcon = function(classId) {
-    const cls = $dataClasses[classId];
-    if (!cls) return 0;
-    const note = cls.note;
-    const match = note.match(/<\s*LaziIcon\s*:\s*(\d+)\s*>/i);
-    if (match) return parseInt(match[1]);
-    return 0; // fallback para ícone padrão
-}
