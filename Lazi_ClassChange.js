@@ -1,14 +1,14 @@
 /*:
  * @author Lazislacker, Gimmer_, Sono
  * @target MZ
- * @plugindesc [v1.1.6] Class Change System with more resource.
+ * @plugindesc [v1.1.5] Class Change System with more resource.
  * @help
  * This plugin adds the ability for a character to learn multiple classes and 
  * switch between them. There are currenty 3 modes: Shared EXP, 
  * Individual Class EXP, and Actor Mode.
  *
  * --------------
- * |Version: 1.1.6|
+ * |Version: 1.1.5|
  * --------------
  * Updated to allow Icon Add on classes with Note
  * Updated Fix Max Hp and Mp
@@ -322,7 +322,7 @@ Imported.Lazi_ClassChange = true;
 var Lazi = Lazi || {};
 Lazi.ClassChange = Lazi.ClassChange || {};
 Lazi.Utils = Lazi.Utils || {};
-Lazi.ClassChange.version = "1.1.6"; // Updated version
+Lazi.ClassChange.version = "1.1.5"; // Updated version
 Lazi.Utils.Debug = false;
 
 //------------------------------//
