@@ -1,16 +1,23 @@
 /*:
- * @author Lazislacker, Gimmer_
+ * @author Lazislacker, Gimmer_, Sono
  * @target MZ
- * @plugindesc Class Change System with 3 different implementations.
+ * @plugindesc [v1.1.6] Class Change System with more resource.
  * @help
  * This plugin adds the ability for a character to learn multiple classes and 
  * switch between them. There are currenty 3 modes: Shared EXP, 
  * Individual Class EXP, and Actor Mode.
- * --------------
- * |Version: 1.1.4|
- * --------------
  *
- * Updated to allow denying classes
+ * --------------
+ * |Version: 1.1.6|
+ * --------------
+ * Updated to allow Icon Add on classes with Note
+ * Updated Fix Max Hp and Mp
+ * 
+ * Updated Fix Menu Remove Option
+ * Updated New Parameter Auto Optimize Equipment
+ *
+ * Added confirmation window before class change.
+ * Added a cooldown system for class changes.
  *
  * ---------------
  * |Documentation|
@@ -77,16 +84,18 @@
  *  actor at the start of a new game in a disabled state. It will appear in
  *  the actor's class list but be unselectable. The Modify Actor Classes plugin 
  *  command can be used to enable this class at a different time.
-* *<LaziGiveClass: [classID]> -> This notetag will add the class to the actor
+ * *<LaziGiveClass: [classID]> -> This notetag will add the class to the actor
  *  at the start of a new game.
- * 
+ * *<LaziIcon: iconId> -> This notetag will add a icon in classe system.
+ *
  * ==>Examples<==
  * *<LaziGiveClass: 1> will give the Actor class ID 1
  * *<LaziGiveClass: 1,5,7,4> will give the Actor classes 1, 5, 7, and 4
  * *<LaziGiveClassDisable: 1> will give the actor class ID 1 in a disabled form
  * *<LaziGiveClassDisable: 1,5,7> will give the actor classes 1, 5, and 7 in a disabled
- *  form.
- * 
+ *
+ * *<LaziIcon: 64> give the classe a icon
+ *
  * =>Plugin Commands<=
  * Classes can also be added to an actor during playtime through the use of a 
  * plugin command.
@@ -177,6 +186,44 @@
  * @off Disable
  * @default off
  * 
+ * @param autoOptimizeEquip
+ * @parent cooldownSettings
+ * @text Auto-Optimize Equipment
+ * @desc Automatically equip the best items for the new class after changing. If disabled, it only un-equips items the new class cannot use.
+ * @type boolean
+ * @on Enable
+ * @off Disable
+ * @default true
+ *
+ * @param confirmationWindow
+ * @parent cooldownSettings
+ * @text Enable Confirmation Window
+ * @desc Show a "Yes/No" confirmation window before changing class.
+ * @type boolean
+ * @on Enable
+ * @off Disable
+ * @default true
+ *
+ * @param cooldownSettings
+ * @text Classe Settings
+ *
+ * @param enableCooldown
+ * @parent cooldownSettings
+ * @text Enable Class Change Cooldown
+ * @desc If enabled, actors must wait a certain amount of time before changing classes again.
+ * @type boolean
+ * @on Enable
+ * @off Disable
+ * @default false
+ *
+ * @param cooldownDuration
+ * @parent cooldownSettings
+ * @text Cooldown Duration (seconds)
+ * @desc The time in seconds an actor must wait before they can change their class again.
+ * @type number
+ * @min 1
+ * @default 60
+ *
  * @param SharedEXPSettings
  * @text Shared EXP Mode Settings
  * 
@@ -264,6 +311,8 @@
  * 
  */
 
+
+
 //------------------------------//
 //      Boilerplate/General     //
 //------------------------------//
@@ -273,7 +322,7 @@ Imported.Lazi_ClassChange = true;
 var Lazi = Lazi || {};
 Lazi.ClassChange = Lazi.ClassChange || {};
 Lazi.Utils = Lazi.Utils || {};
-Lazi.ClassChange.version = "1.1.3";
+Lazi.ClassChange.version = "1.1.6"; // Updated version
 Lazi.Utils.Debug = false;
 
 //------------------------------//
@@ -288,11 +337,11 @@ class Lazi_ClassChange_ClassObject {
 }
 
 Lazi.Utils.GetByClassID = function (classList, classID) {
-    for (_class of classList) {
-        if (_class.classID == classID) {
-            return _class;
-        }
-    }
+    // Using find() for cleaner, more declarative code.
+    // Renamed '_class' to 'classData' for clarity.
+    return classList.find(classData => classData.classID == classID);
+    // The original loop worked, but find() is more idiomatic in modern JS.
+    // for (const classData of classList) { if (classData.classID == classID) return classData; }
 }
 
 Lazi.Utils.DebugLog = function (message) {
@@ -318,16 +367,21 @@ Lazi.ClassChange.initializeParameters = function () {
     Lazi.Utils.DebugLog("Lazi_ClassChange: Initializing Parameters");
     const params = PluginManager.parameters("Lazi_ClassChange");
     this.params = {};
-    this.params.createMenuOption = params.menuOption;
+    this.params.createMenuOption = params.menuOption === 'true';
     this.params.menuOptionText = params.menuText;
     this.params.levelSystemType = params.levelSystem;
     this.params.levelUpText = params.levelUpText;
     this.params.levelupMode = params.levelupMode;
     this.params.statGainType = params.statGainType;
     this.params.usePercentages = params.usePercentages;
+    this.params.autoOptimizeEquip = params.autoOptimizeEquip === 'true';
     this.params.sharedModeMaintainLevel = params.sharedModeMaintainLevel;
+    this.params.confirmationWindow = params.confirmationWindow === 'true';
+    this.params.enableCooldown = params.enableCooldown === 'true';
+    this.params.cooldownDuration = Number(params.cooldownDuration || 60);
+
     this.functionParams = {};
-    this.functionParams.MenuAccess = "enable";
+    // The menu state will be managed by $gameSystem to persist across saves
 }
 
 Lazi.ClassChange.getParam = function (paramName) {
@@ -344,7 +398,7 @@ Lazi.ClassChange.showClassChangeScene = function (args) {
 }
 
 Lazi.ClassChange.addActorClass = function (args) {
-    if (args.actorId == -1 || !args.classId == -1) {
+    if (args.actorId == -1 || args.classId == -1) { // Fixed verification logic
         Lazi.Utils.DebugLog("ERROR!:Cannot have an actor or class with an ID of -1");
         return;
     }
@@ -352,13 +406,13 @@ Lazi.ClassChange.addActorClass = function (args) {
     let classId = parseInt(args.classId);
     let currentClasses = actor.LaziClassChange_classes;
     if (args.type === "Add") {
-        if(actor.LaziClassChange_unavailableClasses.indexOf(classId) > -1){
+        if(actor.LaziClassChange_unavailableClasses.includes(classId)){ // Using .includes() which is more readable
             Lazi.Utils.DebugLog("ERROR!:attempted to add a class that's disabled for this actor");
             return;
         }
 
-        for (let currentClass of currentClasses) {
-            if (currentClass.classID == args.classId) {
+        for (const currentClass of currentClasses) {
+            if (currentClass.classID == classId) {
                 if (currentClass.enabled) {
                     Lazi.Utils.DebugLog("ERROR!: Class already in Actor's class list and enabled");
                     return;
@@ -367,11 +421,11 @@ Lazi.ClassChange.addActorClass = function (args) {
                 return;
             }
         }
-        currentClasses.push(new Lazi_ClassChange_ClassObject(parseInt(args.classId), 0));
+        currentClasses.push(new Lazi_ClassChange_ClassObject(classId, 0));
     }
     if (args.type === "Disable") {
-        for (let currentClass of currentClasses) {
-            if (currentClass.classID == args.classId) {
+        for (const currentClass of currentClasses) {
+            if (currentClass.classID == classId) {
                 if (currentClass.enabled) {
                     Lazi.Utils.DebugLog("ERROR!: Class is already disabled!");
                     return;
@@ -382,32 +436,35 @@ Lazi.ClassChange.addActorClass = function (args) {
         }
     }
     if (args.type === "Remove") {
-        Lazi.Utils.DebugLog("Removing the class with ID " + args.classId);
+        Lazi.Utils.DebugLog("Removing the class with ID " + classId);
 
         //Uh oh, we are currently that class. We should bump ourselves to something else.
-        if (actor._classId == args.classId) {
+        if (actor._classId == classId) {
             //Uh oh. We only have one class and it's this class, do nothing.
-            if (actor.LaziClassChange_classes.length === 1 && actor.LaziClassChange_classes[0].classID == actor._classId) {
+            if (actor.LaziClassChange_classes.length === 1 && actor.LaziClassChange_classes[0].classID == classId) {
                 return;
             }
-            if (actor.LaziClassChange_classes[0].classID != actor._classId) {
-                let newClass = actor.LaziClassChange_classes[0];
+            if (actor.LaziClassChange_classes[0].classID != classId) {
+                const newClass = actor.LaziClassChange_classes[0];
                 Lazi.ClassChange.performClassSwap(actor, newClass.classID, newClass.classExp);
             }
             //Otherwise just use the second in the list. 
             else {
-                let newClass = actor.LaziClassChange_classes[1];
+                const newClass = actor.LaziClassChange_classes[1];
                 Lazi.ClassChange.performClassSwap(actor, newClass.classID, newClass.classExp);
             }
         }
         actor.LaziClassChange_classes = currentClasses.filter((item) => {
-            return item.classID != args.classId;
+            return item.classID != classId;
         })
     }
 }
 
 Lazi.ClassChange.ModifyMenuAccess = function (args) {
-    this.functionParams.MenuAccess = args.state;
+// FIX: The 'this' here does not refer to Lazi.ClassChange when called
+// by the PluginManager. We must use the full object path to
+// ensure the correct property is updated.
+    $gameSystem.setLaziClassMenuAccess(args.state);
 }
 
 Lazi.ClassChange.shouldShowLevels = function () {
@@ -431,27 +488,39 @@ Lazi.ClassChange.shouldUsePercentages = function () {
     return Lazi.ClassChange.getParam("usePercentages") == "true";
 }
 
+Lazi.ClassChange.shouldAutoOptimize = function () {
+    return Lazi.ClassChange.getParam("autoOptimizeEquip") === true;
+}
+
+Lazi.ClassChange.shouldShowConfirmation = function() {
+    return this.getParam("confirmationWindow");
+}
+
+Lazi.ClassChange.isCooldownEnabled = function() {
+    return this.getParam("enableCooldown");
+}
+
 Lazi.ClassChange.CurrentLevelForStatGain = function () {
     return Lazi.ClassChange.getParam("statGainType") == "true";
 }
 
 Lazi.ClassChange.ClassLevelByExp = function (classId, expAmount) {
-    const c = $dataClasses[classId];
-    if (!c) {
+    const classData = $dataClasses[classId];
+    if (!classData) {
         return -1;
     }
-    const basis = c.expParams[0];
-    const extra = c.expParams[1];
-    const acc_a = c.expParams[2];
-    const acc_b = c.expParams[3];
+    const basis = classData.expParams[0];
+    const extra = classData.expParams[1];
+    const acc_a = classData.expParams[2];
+    const acc_b = classData.expParams[3];
     let level = 1;
     while (true) {
-        let levelExp = Math.round(
+        const levelExp = Math.round(
             (basis * Math.pow(level - 1, 0.9 + acc_a / 250) * level * (level + 1)) /
             (6 + Math.pow(level, 2) / 50 / acc_b) +
             (level - 1) * extra
         );
-        if (expAmount - levelExp < 0) //We've passed our level
+        if (expAmount < levelExp) // Simplified logic: if the actor's exp is less than the exp for this level
         {
             return (level - 1) //Since we're 1 level ahead, return the level before.
         }
@@ -464,14 +533,14 @@ Lazi.ClassChange.ClassLevelByExp = function (classId, expAmount) {
 }
 
 Lazi.ClassChange.ExpByClassLevel = function (classId, level) {
-    const c = $dataClasses[classId];
-    if (!c) {
+    const classData = $dataClasses[classId];
+    if (!classData) {
         return -1;
     }
-    const basis = c.expParams[0];
-    const extra = c.expParams[1];
-    const acc_a = c.expParams[2];
-    const acc_b = c.expParams[3];
+    const basis = classData.expParams[0];
+    const extra = classData.expParams[1];
+    const acc_a = classData.expParams[2];
+    const acc_b = classData.expParams[3];
     return Math.round(
         (basis * Math.pow(level - 1, 0.9 + acc_a / 250) * level * (level + 1)) /
         (6 + Math.pow(level, 2) / 50 / acc_b) +
@@ -480,9 +549,10 @@ Lazi.ClassChange.ExpByClassLevel = function (classId, level) {
 
 Lazi.ClassChange.performClassSwap = function (actor, newClassID, newClassExp) {
     //Gotta stay proportional
+    let HPpercent, MPpercent; // Usando let em vez de var
     if (Lazi.ClassChange.shouldUsePercentages()) {
-        var HPpercent = (actor.hp) / (actor.paramBase(0)) //0 = MHP
-        var MPpercent = (actor.mp) / (actor.paramBase(1)) //1 = MMP
+        HPpercent = actor.hp / actor.mhp; // Real Max HP Value
+        MPpercent = actor.mp / actor.mmp; // Real Max MP Value
     }
     //We need to swap out the exp with the correct amount.
     if (Lazi.ClassChange.shouldShowLevels()) {
@@ -501,12 +571,41 @@ Lazi.ClassChange.performClassSwap = function (actor, newClassID, newClassExp) {
 
     //Use our already calculated percentages to change HP now that we've changed classes/levels
     if (Lazi.ClassChange.shouldUsePercentages()) {
-        actor.setHp(Math.round(actor.paramBase(0) * HPpercent));
-        actor.setMp(Math.round(actor.paramBase(1) * MPpercent));
+        actor.setHp(Math.round(actor.mhp * HPpercent));
+        actor.setMp(Math.round(actor.mmp * MPpercent));
+    }
+
+    // Optimize equipment for the new class if the parameter is enabled
+    if (Lazi.ClassChange.shouldAutoOptimize()) {
+        actor.optimizeEquipments();
+        actor.refresh(); // Ensures that status changes from new items are applied
+    }
+
+    if (Lazi.ClassChange.isCooldownEnabled()) {
+        const cooldownFrames = Lazi.ClassChange.getParam("cooldownDuration") * 60;
+        actor.setClassChangeCooldown(cooldownFrames);
     }
 }
 
 Lazi.ClassChange.initialize();
+
+//------------------------------//
+//        Data Manager          //
+//------------------------------//
+
+const Lazi_ClassChange_DataManager_createGameObjects = DataManager.createGameObjects;
+DataManager.createGameObjects = function() {
+    Lazi_ClassChange_DataManager_createGameObjects.call(this);
+    $gameSystem.initLaziClassMenuAccess();
+};
+
+Game_System.prototype.initLaziClassMenuAccess = function() {
+    this._laziClassMenuAccess = this._laziClassMenuAccess || "enable";
+};
+
+Game_System.prototype.setLaziClassMenuAccess = function(state) {
+    this._laziClassMenuAccess = state;
+};
 
 //------------------------------//
 //        Game Intepreter       //
@@ -524,6 +623,17 @@ Game_Interpreter.prototype.command315 = function (params) {
     return true;
 };
 
+//------------------------------//
+//        Scene Base            //
+//------------------------------//
+const Lazi_ClassChange_Scene_Base_update = Scene_Base.prototype.update;
+Scene_Base.prototype.update = function() {
+    Lazi_ClassChange_Scene_Base_update.call(this);
+    // This ensures the cooldown ticks down every frame, in every scene.
+    if ($gameParty && $gameParty.members()) {
+        $gameParty.members().forEach(actor => actor.updateClassChangeCooldown());
+    }
+};
 
 //------------------------------//
 //        Game Actor            //
@@ -535,13 +645,13 @@ Game_Actor.prototype.Lazi_GenerateClassList = function (actorId) {
     const note = actor.note;
     let classList = [];
     classList.push(new Lazi_ClassChange_ClassObject(actor.classId, Lazi.ClassChange.ExpByClassLevel(actor.classId, actor.initialLevel)))
-    let matches = note.matchAll(/<\s*Lazi\s?Give\s?Class:\s*(.+)\s*>/ig)
+    const matches = note.matchAll(/<\s*Lazi\s?Give\s?Class:\s*(.+)\s*>/ig)
     if (matches) {
-        for (let match of matches) {
-            let subMatches = match[0].matchAll(/(\d+),?/g)
-            for (let subMatch of subMatches) {
+        for (const match of matches) {
+            const subMatches = match[0].matchAll(/(\d+),?/g)
+            for (const subMatch of subMatches) {
                 //We already have it, don't add it.
-                let alreadyAdded = classList.filter((entry) => {
+                const alreadyAdded = classList.filter((entry) => {
                     return (entry.classID == parseInt(subMatch[1]))
                 }).length != 0
                 if ((parseInt(subMatch[1]) == actor._classId) || alreadyAdded || this.LaziClassChange_unavailableClasses.indexOf(parseInt[subMatch[1]]) > -1) {
@@ -552,13 +662,13 @@ Game_Actor.prototype.Lazi_GenerateClassList = function (actorId) {
             }
         }
     }
-    let DisableMatches = note.matchAll(/<\s*Lazi\s?Give\s?Class\s?Disable:\s*(.+)\s*>/ig)
+    const DisableMatches = note.matchAll(/<\s*Lazi\s?Give\s?Class\s?Disable:\s*(.+)\s*>/ig)
     if (DisableMatches) {
-        for (let match of DisableMatches) {
-            let subMatches = match[0].matchAll(/(\d+),?/g)
-            for (let subMatch of subMatches) {
+        for (const match of DisableMatches) {
+            const subMatches = match[0].matchAll(/(\d+),?/g)
+            for (const subMatch of subMatches) {
                 //We already have it, don't add it.
-                let alreadyAdded = classList.filter((entry) => {
+                const alreadyAdded = classList.filter((entry) => {
                     return (entry.classID == parseInt(subMatch[1]))
                 }).length != 0
                 if ((parseInt(subMatch[1]) == actor._classId) || alreadyAdded || this.LaziClassChange_unavailableClasses.indexOf(parseInt[subMatch[1]]) > -1) {
@@ -576,7 +686,7 @@ Game_Actor.prototype.Lazi_GenerateClassList = function (actorId) {
             return;
 
         //We should only have 1
-        let DefaultMatch = note.match(/<\s*Lazi\s?Give\s?Class\s?Default[:]?\s*(\d+)\s*>/ig)
+        const DefaultMatch = note.match(/<\s*Lazi\s?Give\s?Class\s?Default[:]?\s*(\d+)\s*>/ig)
         if (DefaultMatch) {
             this.LaziClassChange_ACTORMODECLASS = new Lazi_ClassChange_ClassObject(RegExp.$1, 0);
         }
@@ -590,17 +700,32 @@ Game_Actor.prototype.Lazi_GenerateClassList = function (actorId) {
     return classList;
 }
 
+Game_Actor.prototype.setClassChangeCooldown = function(frames) {
+    this._classChangeCooldown = frames;
+};
+
+Game_Actor.prototype.updateClassChangeCooldown = function() {
+    if (this._classChangeCooldown > 0) {
+        this._classChangeCooldown--;
+    }
+};
+
+Game_Actor.prototype.isClassChangeOnCooldown = function() {
+    return this._classChangeCooldown > 0;
+};
+
+
 Game_Actor.prototype.Lazi_GenerateClassUnavailableList = function(actorId){
     const actor = $dataActors[actorId]
     const note = actor.note;
     let classList = [];
-    let DenyMatches = note.matchAll(/<\s*Lazi\s?Deny\s?Class\s?:\s*(.+)\s*>/ig)
+    const DenyMatches = note.matchAll(/<\s*Lazi\s?Deny\s?Class\s?:\s*(.+)\s*>/ig)
     if (DenyMatches) {
-        for (let match of DenyMatches) {
-            let subMatches = match[0].matchAll(/(\d+),?/g)
-            for (let subMatch of subMatches) {
+        for (const match of DenyMatches) {
+            const subMatches = match[0].matchAll(/(\d+),?/g)
+            for (const subMatch of subMatches) {
                 //We already have it, don't add it.
-                let alreadyAdded = classList.filter((entry) => {
+                const alreadyAdded = classList.filter((entry) => {
                     return (entry.classID == parseInt(subMatch[1]))
                 }).length != 0
                 if ((parseInt(subMatch[1]) == actor._classId) || alreadyAdded) {
@@ -635,12 +760,12 @@ Game_Actor.prototype.Lazi_IncreaseParams = function (amount, paramID) {
 }
 
 Game_Actor.prototype.Lazi_StatGainLevelUp = function (originalLvl) {
-    let params = $dataClasses[this._classId].params;
+    const params = $dataClasses[this._classId].params;
     for (let i = 0; i < params.length; ++i) {
         for (let j = (originalLvl + 1); j <= this.Lazi_GetACTORMODELevel(); ++j) {
             //Use current level
             if (Lazi.ClassChange.CurrentLevelForStatGain()) {
-                let paramDiff = params[i][j] - params[i][j - 1];
+                const paramDiff = params[i][j] - params[i][j - 1];
                 this.Lazi_IncreaseParams(paramDiff, i);
             }
             //Use level 1 stats
@@ -662,6 +787,7 @@ Game_Actor.prototype.initMembers = function () {
         if (Lazi.ClassChange.isStatGainMode()) {
             this.laziClassChange_params = [];
         }
+        this._classChangeCooldown = 0;
     }
 
 }
@@ -678,7 +804,7 @@ Game_Actor.prototype.setup = function (actorId) {
     Lazi.ClassChange.GameActor_setup.apply(this, arguments);
     //Run stat gain based on the starting actor class level.
     if (Lazi.ClassChange.isStatGainMode()) {
-        let baseClassParams = this.Lazi_GetACTORMODEClass().params;
+        const baseClassParams = this.Lazi_GetACTORMODEClass().params;
         for (let i = 0; i < baseClassParams.length; ++i) {
             this.laziClassChange_params[i] = baseClassParams[i][1];
         }
@@ -696,7 +822,7 @@ Game_Actor.prototype.gainExp = function (exp, onlyToBase = false) {
         Lazi.ClassChange.GameActor_gainExp.apply(this, [exp]);
     }
     if (Lazi.ClassChange.isActorLevelMode()) {
-        let currentLVL = this.Lazi_GetACTORMODELevel();
+        const currentLVL = this.Lazi_GetACTORMODELevel();
         this.LaziClassChange_ACTORMODECLASS.classExp += Math.round(exp * this.finalExpRate());
         if (currentLVL < this.Lazi_GetACTORMODELevel()) {
             if (Lazi.ClassChange.isStatGainMode()) {
@@ -734,24 +860,25 @@ Game_Actor.prototype.paramBase = function (paramId) {
     }
 }
 
+
 Lazi.ClassChange.GameActor_changeClass = Game_Actor.prototype.changeClass;
 Game_Actor.prototype.changeClass = function (classId, keepExp) {
-    let _class = Lazi.Utils.GetByClassID(this.LaziClassChange_classes, classId);
-    if (!_class) {
+    let classData = Lazi.Utils.GetByClassID(this.LaziClassChange_classes, classId);
+    if (!classData) {
         //We don't have it but they clearly want to add it for this character, let's add a new entry to list
         this.LaziClassChange_classes.push(new Lazi_ClassChange_ClassObject(classId, 0, true));
-        _class = Lazi.Utils.GetByClassID(this.LaziClassChange_classes, classId);
+        classData = Lazi.Utils.GetByClassID(this.LaziClassChange_classes, classId);
     } else if (Lazi.ClassChange.isSharedMaintainLevel()) {
-        var currentLvl = this._level;
-        var currentEXP = this._exp[this._classId];
-        var EXPForCurrent = Lazi.ClassChange.ExpByClassLevel(this._classId, currentLvl);
-        var EXPForNext = Lazi.ClassChange.ExpByClassLevel(this._classId, currentLvl + 1);
-        var percentToNext = (currentEXP - EXPForCurrent) / (EXPForNext - EXPForCurrent);
+        const currentLvl = this._level;
+        const currentEXP = this._exp[this._classId];
+        const EXPForCurrent = Lazi.ClassChange.ExpByClassLevel(this._classId, currentLvl);
+        const EXPForNext = Lazi.ClassChange.ExpByClassLevel(this._classId, currentLvl + 1);
+        const percentToNext = (currentEXP - EXPForCurrent) / (EXPForNext - EXPForCurrent);
     }
     Lazi.ClassChange.GameActor_changeClass.apply(this, arguments);
     if (!keepExp) {
-        this._exp[_class.classID] = _class.classExp;
-        this._level = Lazi.Utils.ClassLevelByExp(_class.classExp);
+        this._exp[classData.classID] = classData.classExp;
+        this._level = Lazi.Utils.ClassLevelByExp(classData.classExp);
     } else if (Lazi.ClassChange.isSharedMaintainLevel()) {
         let EXPForNewNext = Lazi.ClassChange.ExpByClassLevel(this._classId, currentLvl + 1);
         let EXPForNewCurrent = Lazi.ClassChange.ExpByClassLevel(this._classId, currentLvl);
@@ -761,6 +888,7 @@ Game_Actor.prototype.changeClass = function (classId, keepExp) {
         this.initSkills();
     }
 }
+
 
 Lazi.ClassChange.GameActor_isMaxLevel = Game_Actor.prototype.isMaxLevel;
 Game_Actor.prototype.isMaxLevel = function () {
@@ -781,7 +909,7 @@ Window_StatusBase.prototype.drawActorClass = function (actor, x, y, width) {
     } else {
         width = width || 168;
         this.resetTextColor();
-        let text = actor.currentClass().name + " Lv. " + actor._level;
+        const text = `${actor.currentClass().name} Lv. ${actor._level}`;
         this.drawText(text, x, y, width);
     }
 }
@@ -832,10 +960,11 @@ Window_Status.prototype.expNextValue = function () {
 Lazi.ClassChange.WindowMenuCommand_addMainCommands = Window_MenuCommand.prototype.addMainCommands;
 Window_MenuCommand.prototype.addMainCommands = function () {
     Lazi.ClassChange.WindowMenuCommand_addMainCommands.apply(this, arguments);
-    if (Lazi.ClassChange.getParam("createMenuOption")) {
-        if (Lazi.ClassChange.functionParams.MenuAccess == "enable") {
+    if (Lazi.ClassChange.getParam("createMenuOption") === true) {
+        const menuAccess = $gameSystem._laziClassMenuAccess || "enable";
+        if (menuAccess === "enable") {
             this.addCommand(Lazi.ClassChange.getParam("menuOptionText"), "classchange", this.areMainCommandsEnabled());
-        } else if (Lazi.ClassChange.functionParams.MenuAccess == "disable") {
+        } else if (menuAccess === "disable") {
             this.addCommand(Lazi.ClassChange.getParam("menuOptionText"), "classchange", false);
         } else {
             //Don't add it, the option must set to remove.
@@ -883,6 +1012,7 @@ Lazi_Scene_ClassChange.prototype.create = function () {
     this.createStatusWindow();
     this.createItemWindow();
     this.createActorWindow();
+    this.createConfirmationWindow();
     this._itemWindow.activate();
     this._itemWindow.selectLast();
 };
@@ -906,6 +1036,21 @@ Lazi_Scene_ClassChange.prototype.statusWindowRect = function () {
     return new Rectangle(wx, wy, ww, wh);
 };
 
+Lazi_Scene_ClassChange.prototype.createConfirmationWindow = function() {
+    const rect = this.confirmationWindowRect();
+    this._confirmationWindow = new Window_ClassChangeConfirm(rect);
+    this._confirmationWindow.setHandler("yes", this.onConfirmOk.bind(this));
+    this._confirmationWindow.setHandler("no", this.onConfirmCancel.bind(this));
+    this.addWindow(this._confirmationWindow);
+};
+
+Lazi_Scene_ClassChange.prototype.confirmationWindowRect = function() {
+    const ww = 240;
+    const wh = this.calcWindowHeight(2, true);
+    const wx = (Graphics.boxWidth - ww) / 2;
+    const wy = (Graphics.boxHeight - wh) / 2;
+    return new Rectangle(wx, wy, ww, wh);
+};
 
 Lazi_Scene_ClassChange.prototype.createItemWindow = function () {
     const rect = this.itemWindowRect();
@@ -962,15 +1107,38 @@ Lazi_Scene_ClassChange.prototype.performClassSwap = function (item) {
     const actor = this.actor();
     Lazi.ClassChange.performClassSwap(actor, item.classID, item.classExp);
     this.useItem();
+    this._itemWindow.startCooldownRefresh(); // Starts the cooldown refresh
 }
 
 Lazi_Scene_ClassChange.prototype.onActorChange = function () {
-    Scene_MenuBase.prototype.onActorChange.call(this);
+    // Chama a função base para atualizar o ator
+    Scene_ItemBase.prototype.onActorChange.call(this);
+    // Reativa a janela de lista de classes para que o controle não seja perdido
     this.refreshActor();
+    this._itemWindow.activate(); // Reactivates the class list window so control is not lost
 };
 
 Lazi_Scene_ClassChange.prototype.onItemOk = function () {
+    if (Lazi.ClassChange.shouldShowConfirmation()) {
+        this._confirmationWindow.open();
+        this._confirmationWindow.activate();
+    } else {
+        this.performClassSwap(this.item());
+    }
+};
+
+Lazi_Scene_ClassChange.prototype.onConfirmOk = function() {
     this.performClassSwap(this.item());
+    this.closeConfirmationWindow();
+};
+
+Lazi_Scene_ClassChange.prototype.onConfirmCancel = function() {
+    this.closeConfirmationWindow();
+};
+
+Lazi_Scene_ClassChange.prototype.closeConfirmationWindow = function() {
+    this._confirmationWindow.close();
+    this._itemWindow.activate();
 };
 
 //------------------------------//
@@ -980,6 +1148,25 @@ function Window_ClassList() {
     this.initialize(...arguments);
 }
 
+function Window_ClassChangeConfirm() {
+    this.initialize(...arguments);
+}
+
+Window_ClassChangeConfirm.prototype = Object.create(Window_Command.prototype);
+Window_ClassChangeConfirm.prototype.constructor = Window_ClassChangeConfirm;
+
+Window_ClassChangeConfirm.prototype.initialize = function(rect) {
+    Window_Command.prototype.initialize.call(this, rect);
+    this.openness = 0; // Starts the window completely closed to prevent flickering
+    this.deactivate(); // Keeps the window inactive until called
+};
+
+Window_ClassChangeConfirm.prototype.makeCommandList = function() {
+    this.addCommand("Sim", "yes");
+    this.addCommand("Não", "no");
+};
+
+
 Window_ClassList.prototype = Object.create(Window_Selectable.prototype);
 Window_ClassList.prototype.constructor = Window_ClassList;
 
@@ -987,6 +1174,9 @@ Window_ClassList.prototype.initialize = function (rect) {
     Window_Selectable.prototype.initialize.call(this, rect);
     this._actor = null;
     this._data = [];
+    this._lastCooldownFrames = 0; // Tracks frames to know when to update
+    this._lastCooldownSeconds = 0; // Tracks seconds to know when to redraw
+    this._cooldownRefresh = false;
 };
 
 Window_ClassList.prototype.setActor = function (actor) {
@@ -994,7 +1184,14 @@ Window_ClassList.prototype.setActor = function (actor) {
         this._actor = actor;
         this.refresh();
         this.scrollTo(0, 0);
+        this._lastCooldownFrames = 0; // Resets the cooldown tracker on actor change
+        this._lastCooldownSeconds = 0;
+        this._cooldownRefresh = this._actor.isClassChangeOnCooldown();
     }
+};
+
+Window_ClassList.prototype.startCooldownRefresh = function() {
+    this._cooldownRefresh = true;
 };
 
 Window_ClassList.prototype.maxCols = function () {
@@ -1029,17 +1226,23 @@ Window_ClassList.prototype.includes = function (item) {
 };
 
 Window_ClassList.prototype.isEnabled = function (item) {
-    return this._actor && item.enabled && this._actor._classId != item.classID;
+    if (!this._actor || !item.enabled || this._actor._classId === item.classID) {
+        return false;
+    }
+    if (Lazi.ClassChange.isCooldownEnabled() && this._actor.isClassChangeOnCooldown()) {
+        return false;
+    }
+    return true;
 };
 
 Window_ClassList.prototype.makeItemList = function () {
     if (this._actor) {
-        let classesThatExist = this._actor.LaziClassChange_classes.filter((_class)=>{
-            if ($dataClasses[_class.classID])
+        this._data = this._actor.LaziClassChange_classes.filter((classData)=>{
+            // Ensures the class actually exists in the game data before displaying it.
+            if ($dataClasses[classData.classID])
                 return true;
             return false;
-        })
-        this._data = classesThatExist;
+        });
     } else {
         this._data = [];
     }
@@ -1061,20 +1264,32 @@ Window_ClassList.prototype.drawItemName = function(item, x, y, width) {
 };
 
 Window_ClassList.prototype.drawItem = function (index) {
-    const _class = this.itemAt(index);
-    if (_class && $dataClasses[_class.classID]) {
-        const className = $dataClasses[_class.classID].name;
+    const classData = this.itemAt(index);
+    const classInfo = $dataClasses[classData.classID];
+    if (classData && classInfo) {
         const levelWidth = this.levelWidth();
         const rect = this.itemLineRect(index);
-        this.changePaintOpacity(this.isEnabled(_class));
+        this.changePaintOpacity(this.isEnabled(classData));
         this.drawItemName({
-            name: className,
-            iconIndex: undefined
+            name: classInfo.name,
+            iconIndex: Lazi.ClassChange.getClassIcon(classData.classID)
         }, rect.x, rect.y, rect.width - levelWidth);
-        if (Lazi.ClassChange.shouldShowLevels())
-            this.drawclassLevel(_class, rect.x, rect.y, rect.width);
+
+        // Check if we should draw cooldown or level
+        if (this._actor.isClassChangeOnCooldown() && this._actor.currentClass().id !== classData.classID) {
+            this.drawCooldownTime(this._actor, rect.x, rect.y, rect.width);
+        } else if (Lazi.ClassChange.shouldShowLevels()) {
+            this.drawclassLevel(classData, rect.x, rect.y, rect.width);
+        }
+
         this.changePaintOpacity(1);
     }
+};
+
+Window_ClassList.prototype.drawCooldownTime = function(actor, x, y, width) {
+    const remainingFrames = actor._classChangeCooldown || 0;
+    const remainingSeconds = Math.ceil(remainingFrames / 60);
+    this.drawText(remainingSeconds + "s", x, y, width, "right");
 };
 
 Window_ClassList.prototype.levelWidth = function () {
@@ -1085,8 +1300,8 @@ Window_ClassList.prototype.levelWidth = function () {
     }
 };
 
-Window_ClassList.prototype.drawclassLevel = function (_class, x, y, width) {
-    this.drawText("Lvl. " + Lazi.ClassChange.ClassLevelByExp(_class.classID, _class.classExp), x, y, width, "right");
+Window_ClassList.prototype.drawclassLevel = function (classData, x, y, width) {
+    this.drawText("Lvl. " + Lazi.ClassChange.ClassLevelByExp(classData.classID, classData.classExp), x, y, width, "right");
 };
 
 Window_ClassList.prototype.updateHelp = function () {
@@ -1104,3 +1319,33 @@ Window_ClassList.prototype.refresh = function () {
     this.makeItemList();
     Window_Selectable.prototype.refresh.call(this);
 };
+
+Window_ClassList.prototype.update = function() {
+    Window_Selectable.prototype.update.call(this);
+    if (this._actor && this._cooldownRefresh) {
+        const currentFrames = this._actor._classChangeCooldown || 0;
+        // Checks if the cooldown has changed or just ended
+        if (this._lastCooldownFrames > 0 && currentFrames <= 0) {
+            this._cooldownRefresh = false; // Stops checking
+            this.refresh(); // Final update to re-enable items
+        } else {
+            const currentSeconds = Math.ceil(currentFrames / 60);
+            // Only redraws the window if the number of seconds has changed (performance optimization)
+            if (this._lastCooldownSeconds !== currentSeconds) {
+                this.refresh();
+            }
+        }
+
+        this._lastCooldownFrames = currentFrames;
+        this._lastCooldownSeconds = Math.ceil(currentFrames / 60);
+    }
+};
+
+Lazi.ClassChange.getClassIcon = function(classId) {
+    const classData = $dataClasses[classId];
+    if (!classData) return 0;
+    const note = classData.note;
+    const match = note.match(/<\s*LaziIcon\s*:\s*(\d+)\s*>/i);
+    if (match) return parseInt(match[1]);
+    return 0; //Fallback to default icon if no notetag
+}
