@@ -1,7 +1,7 @@
 /*:
  * @author Lazislacker, Gimmer_, Sono
  * @target MZ
- * @plugindesc [v1.1.5] Class Change System with more resource.
+ * @plugindesc [v1.1.6] Class Change System with more resource.
  * @help
  * This plugin adds the ability for a character to learn multiple classes and 
  * switch between them. There are currenty 3 modes: Shared EXP, 
@@ -18,6 +18,15 @@
  *
  * Added confirmation window before class change.
  * Added a cooldown system for class changes.
+ * 
+ * --------------
+ * |Version: 1.1.6|
+ * --------------
+ * 
+ * Added text and localization options for various UI elements.
+ * Added scene layout options for class change screen.
+ * Added option to customize number of columns in class list.
+ * Added Gold and Items cost notetags for class changes.
  *
  * ---------------
  * |Documentation|
@@ -96,6 +105,11 @@
  *
  * *<LaziIcon: 64> give the classe a icon
  *
+ * ->Setting Class Change Costs<-7
+ * *<LaziClassCostGold: amount>
+ * *<LaziClassCostGold: iconIndex, amount> -> Sets a gold cost with a custom icon.
+ * *<LaziClassCostItem: itemId, amount> -> Sets an item cost.
+ *
  * =>Plugin Commands<=
  * Classes can also be added to an actor during playtime through the use of a 
  * plugin command.
@@ -152,21 +166,28 @@
  * In order to set the Base class for an actor, the <LaziGiveClassDefault:[classId]> notetag should be placed in the notes of the actor.
  * If this notetag is not present for an actor, the first class in the actor's class list will be used. This will be the first class specified
  * with the add class notetag or the actor's current class if no classes are granted through this notetag.
- * 
+ * @type string
+ *
+ * @param generalSettings
+ * @text General Settings
+ * @desc General settings for the class system.
+ *
  * @param menuOption
+ * @parent generalSettings
  * @text Add Entry To Menu
- * @desc Should a "ClassChange" entry be added to the menu? WARNING: If this is disabled, another plugin will need to add a call to the "classchange" handler 
- * in order for functionality to be enabled.
+ * @desc Add a "Class Change" option to the main menu?
  * @type boolean
  * @default true
- * 
+ *
  * @param menuText
+ * @parent generalSettings
  * @text Menu Option Text
- * @desc The text to display in the menu for this option
+ * @desc The text that will be displayed in the menu for this option.
  * @default Class Change
  * @type string
- * 
+ *
  * @param levelSystem
+ * @parent generalSettings
  * @text Level System Type
  * @desc The type of level system to use.
  * @type select
@@ -174,29 +195,57 @@
  * @value singleLevel
  * @option Class EXP
  * @value individualLevel
- * @option Class EXP + Actor EXP EXPERIMENTAL
+ * @option Class EXP + Actor EXP (Experimental)
  * @value actorMode
- * @default singleLevel
- * 
+ * @default individualLevel
+ *
  * @param usePercentages
+ * @parent generalSettings
  * @text Preserve Percentages for HP/MP
- * @desc Should HP/MP percentages match after a class change
- * @type boolean
- * @on Enable
- * @off Disable
- * @default off
- * 
- * @param autoOptimizeEquip
- * @parent cooldownSettings
- * @text Auto-Optimize Equipment
- * @desc Automatically equip the best items for the new class after changing. If disabled, it only un-equips items the new class cannot use.
+ * @desc Should HP/MP percentages match after a class change?
  * @type boolean
  * @on Enable
  * @off Disable
  * @default true
  *
+ * @param autoOptimizeEquip
+ * @parent generalSettings
+ * @text Auto-Optimize Equipment
+ * @desc Automatically equip the best items for the new class after changing.
+ * @type boolean
+ * @on Enable
+ * @off Disable
+ * @default true
+ *
+ * @param sceneLayoutSettings
+ * @text Scene Layout
+ * @desc Layout settings for the class change screen.
+ *
+ * @param sceneLayout
+ * @parent sceneLayoutSettings
+ * @text Scene Layout
+ * @desc Choose the layout for the class change screen.
+ * @type select
+ * @option Status on Left, Classes on Right
+ * @value statusLeft
+ * @option Classes on Left, Status on Right
+ * @value classLeft
+ * @default statusLeft
+ *
+ * @param classColumns
+ * @parent sceneLayoutSettings
+ * @text Class List Columns
+ * @desc The number of columns to display in the class list window.
+ * @type number
+ * @min 1
+ * @default 2
+ *
+ * @param confirmationSettings
+ * @text Confirmation & Cooldown
+ * @desc Settings for the confirmation window and cooldown.
+ *
  * @param confirmationWindow
- * @parent cooldownSettings
+ * @parent confirmationSettings
  * @text Enable Confirmation Window
  * @desc Show a "Yes/No" confirmation window before changing class.
  * @type boolean
@@ -204,63 +253,108 @@
  * @off Disable
  * @default true
  *
- * @param cooldownSettings
- * @text Classe Settings
- *
  * @param enableCooldown
- * @parent cooldownSettings
+ * @parent confirmationSettings
  * @text Enable Class Change Cooldown
- * @desc If enabled, actors must wait a certain amount of time before changing classes again.
+ * @desc If enabled, actors must wait a certain amount of time before they can change classes again.
  * @type boolean
  * @on Enable
  * @off Disable
- * @default false
+ * @default true
  *
  * @param cooldownDuration
- * @parent cooldownSettings
+ * @parent confirmationSettings
  * @text Cooldown Duration (seconds)
  * @desc The time in seconds an actor must wait before they can change their class again.
  * @type number
  * @min 1
  * @default 60
  *
+ * @param textSettings
+ * @text Text & Localization
+ * @desc Customize the text displayed in the class change windows.
+ *
+ * @param selectClassHelpText
+ * @parent textSettings
+ * @text Select Class Help Text
+ * @desc The text shown in the help window on the class selection screen. Use %1 for the actor's name.
+ * @type string
+ * @default Select the new class for %1.
+ *
+ * @param confirmYesText
+ * @parent textSettings
+ * @text Confirmation "Yes" Text
+ * @desc The text for the "Yes" option in the confirmation window.
+ * @type string
+ * @default Yes
+ *
+ * @param confirmNoText
+ * @parent textSettings
+ * @text Confirmation "No" Text
+ * @desc The text for the "No" option in the confirmation window.
+ * @type string
+ * @default No
+ *
+ * @param confirmHelpText
+ * @parent textSettings
+ * @text Help Window Confirmation Text
+ * @desc The text shown in the help window for confirmation. Use %1 for the actor's name.
+ * @type string
+ * @default Confirm class change for %1?
+ *
+ * @param confirmHelpCooldownText
+ * @parent textSettings
+ * @text Help Window Cooldown Text
+ * @desc The additional text for the cooldown. Use %1 for the duration in seconds.
+ * @type string
+ * @default  This will start a %1-second cooldown.
+ *
+ * @param specificModeSettings
+ * @text Specific Mode Settings
+ * @desc Settings for the specific EXP modes.
+ *
  * @param SharedEXPSettings
+ * @parent specificModeSettings
  * @text Shared EXP Mode Settings
- * 
+ *
  * @param sharedModeMaintainLevel
  * @parent SharedEXPSettings
  * @text Maintain Level + Percentage
- * @desc When enabled the current level and percentage to next will be maintained when changing classes
+ * @desc When enabled, the current level and percentage to next level will be maintained when changing classes.
  * @on Enable
  * @off Disable
  * @type boolean
- * @default off
- * 
+ * @default true
+ *
  * @param ActorModeSettings
+ * @parent specificModeSettings
  * @text Actor Mode Settings
- * 
+ *
  * @param levelUpText
- * @text Level Up Text
  * @parent ActorModeSettings
- * @desc The text to display when the actor level goes up. Use %1 for actor name and %2 for the actor's new level.
+ * @text Level Up Text
+ * @desc The text to display when the actor levels up their base level. Use %1 for actor name and %2 for the new level.
  * @type string
  * @default %1 is now Base Level %2
- * 
+ *
  * @param levelupMode
- * @text Level Up Mode
  * @parent ActorModeSettings
+ * @text Level Up Mode
  * @type select
  * @option Normal
  * @value normalMode
  * @option Stat Gain
  * @value statMode
- * 
+ * @default normalMode
+ *
  * @param statGainType
- * @text Current Level For Stat Gains?
  * @parent ActorModeSettings
+ * @text Current Level For Stat Gains?
+ * @desc If true, the delta between the parameters for the current base level and the next will be added to stats. If false, the level 1 stats for the class will be used.
  * @type boolean
  * @on Current Level
  * @off Level 1
+ * @default false
  * 
  * @command ModifyClasses
  * @text Modify Actor Classes
@@ -359,7 +453,7 @@ Lazi.ClassChange.initialize = function () {
 Lazi.ClassChange.initializePluginCommands = function () {
     Lazi.Utils.DebugLog("Lazi_ClassChange: Initializing Plugin Commands");
     PluginManager.registerCommand("Lazi_ClassChange", "ModifyClasses", this.addActorClass);
-    PluginManager.registerCommand("Lazi_ClassChange", "ModifyMenuAccess", this.ModifyMenuAccess);
+    PluginManager.registerCommand("Lazi_ClassChange", "ModifyMenuAccess", this.ModifyMenuAccess.bind(this));
     PluginManager.registerCommand("Lazi_ClassChange", "ShowClassChangeScene", this.showClassChangeScene);
 }
 
@@ -368,17 +462,25 @@ Lazi.ClassChange.initializeParameters = function () {
     const params = PluginManager.parameters("Lazi_ClassChange");
     this.params = {};
     this.params.createMenuOption = params.menuOption === 'true';
-    this.params.menuOptionText = params.menuText;
-    this.params.levelSystemType = params.levelSystem;
-    this.params.levelUpText = params.levelUpText;
-    this.params.levelupMode = params.levelupMode;
-    this.params.statGainType = params.statGainType;
-    this.params.usePercentages = params.usePercentages;
+    this.params.menuOptionText = params.menuText || "Class Change";
+    this.params.levelSystemType = params.levelSystem || "singleLevel";
+    this.params.levelUpText = params.levelUpText || "%1 is now Base Level %2";
+    this.params.levelupMode = params.levelupMode || "normalMode";
+    this.params.statGainType = params.statGainType === 'true'; // Default is 'false'
+    this.params.usePercentages = params.usePercentages === 'true'; // Default is 'off' which becomes false
     this.params.autoOptimizeEquip = params.autoOptimizeEquip === 'true';
-    this.params.sharedModeMaintainLevel = params.sharedModeMaintainLevel;
+    this.params.sharedModeMaintainLevel = params.sharedModeMaintainLevel === 'true'; // Default is 'off' which becomes false
     this.params.confirmationWindow = params.confirmationWindow === 'true';
     this.params.enableCooldown = params.enableCooldown === 'true';
     this.params.cooldownDuration = Number(params.cooldownDuration || 60);
+    this.params.confirmYesText = params.confirmYesText || "Yes";
+    this.params.confirmNoText = params.confirmNoText || "No";
+    this.params.confirmHelpText = params.confirmHelpText || "Confirm class change for %1?";
+    this.params.confirmHelpCooldownText = params.confirmHelpCooldownText || " This will start a %1 - seconds cooldown.";
+    this.params.selectClassHelpText = params.selectClassHelpText || "Select the new class for %1.";
+    this.params.sceneLayout = params.sceneLayout || "statusLeft";
+    this.params.classColumns = Number(params.classColumns || 2);
+
 
     this.functionParams = {};
     // The menu state will be managed by $gameSystem to persist across saves
@@ -461,10 +563,7 @@ Lazi.ClassChange.addActorClass = function (args) {
 }
 
 Lazi.ClassChange.ModifyMenuAccess = function (args) {
-// FIX: The 'this' here does not refer to Lazi.ClassChange when called
-// by the PluginManager. We must use the full object path to
-// ensure the correct property is updated.
-    $gameSystem.setLaziClassMenuAccess(args.state);
+    $gameSystem.setLaziClassMenuAccess(args.state.toLowerCase());
 }
 
 Lazi.ClassChange.shouldShowLevels = function () {
@@ -484,8 +583,7 @@ Lazi.ClassChange.isSharedMaintainLevel = function () {
 }
 
 Lazi.ClassChange.shouldUsePercentages = function () {
-    //Uses string despite being a boolean type.
-    return Lazi.ClassChange.getParam("usePercentages") == "true";
+    return this.getParam("usePercentages");
 }
 
 Lazi.ClassChange.shouldAutoOptimize = function () {
@@ -549,8 +647,9 @@ Lazi.ClassChange.ExpByClassLevel = function (classId, level) {
 
 Lazi.ClassChange.performClassSwap = function (actor, newClassID, newClassExp) {
     //Gotta stay proportional
-    let HPpercent, MPpercent; // Usando let em vez de var
-    if (Lazi.ClassChange.shouldUsePercentages()) {
+    let HPpercent, MPpercent;
+    const usePercentages = this.shouldUsePercentages();
+    if (usePercentages) {
         HPpercent = actor.hp / actor.mhp; // Real Max HP Value
         MPpercent = actor.mp / actor.mmp; // Real Max MP Value
     }
@@ -570,7 +669,7 @@ Lazi.ClassChange.performClassSwap = function (actor, newClassID, newClassExp) {
     }
 
     //Use our already calculated percentages to change HP now that we've changed classes/levels
-    if (Lazi.ClassChange.shouldUsePercentages()) {
+    if (usePercentages) {
         actor.setHp(Math.round(actor.mhp * HPpercent));
         actor.setMp(Math.round(actor.mmp * MPpercent));
     }
@@ -1009,8 +1108,10 @@ Lazi_Scene_ClassChange.prototype.initialize = function () {
 Lazi_Scene_ClassChange.prototype.create = function () {
     Scene_ItemBase.prototype.create.call(this);
     this.createHelpWindow();
+    // A ordem de criação é importante para o layout.
+    // 1. Status Window (define a base da esquerda)
     this.createStatusWindow();
-    this.createItemWindow();
+    this.createItemWindow(); // 2. Item Window (se ajusta ao lado da Status)
     this.createActorWindow();
     this.createConfirmationWindow();
     this._itemWindow.activate();
@@ -1024,15 +1125,31 @@ Lazi_Scene_ClassChange.prototype.start = function () {
 
 Lazi_Scene_ClassChange.prototype.createStatusWindow = function () {
     const rect = this.statusWindowRect();
-    this._statusWindow = new Window_SkillStatus(rect); //Want same info, just piggyback
+    this._statusWindow = new Window_EquipStatus(rect); // A Window_EquipStatus já sabe como mostrar a pré-visualização.
     this.addWindow(this._statusWindow);
 };
 
 Lazi_Scene_ClassChange.prototype.statusWindowRect = function () {
-    const ww = Graphics.boxWidth
-    const wh = this.calcWindowHeight(3, true);
-    const wx = this.isRightInputMode() ? Graphics.boxWidth - ww : 0;
-    const wy = this.mainAreaTop();
+    const layout = Lazi.ClassChange.getParam("sceneLayout");
+    let wx = 0;
+    let ww = Graphics.boxWidth;
+    let wh = 0;
+    let wy = 0;
+
+    switch (layout) {
+        case "statusLeft":
+            // A largura padrão da Window_EquipStatus é 312.
+            ww = 312;
+            wh = this.mainAreaHeight();
+            wx = 0;
+            wy = this.mainAreaTop();
+            break;
+        case "classLeft":
+            ww = Math.floor(Graphics.boxWidth / 2);
+            wh = this.mainAreaHeight();
+            wx = Graphics.boxWidth - ww;
+            wy = this.mainAreaTop();
+    }
     return new Rectangle(wx, wy, ww, wh);
 };
 
@@ -1041,6 +1158,7 @@ Lazi_Scene_ClassChange.prototype.createConfirmationWindow = function() {
     this._confirmationWindow = new Window_ClassChangeConfirm(rect);
     this._confirmationWindow.setHandler("yes", this.onConfirmOk.bind(this));
     this._confirmationWindow.setHandler("no", this.onConfirmCancel.bind(this));
+    this._confirmationWindow.setHelpWindow(this._helpWindow);
     this.addWindow(this._confirmationWindow);
 };
 
@@ -1056,6 +1174,7 @@ Lazi_Scene_ClassChange.prototype.createItemWindow = function () {
     const rect = this.itemWindowRect();
     this._itemWindow = new Window_ClassList(rect);
     this._itemWindow.setHelpWindow(this._helpWindow);
+    this._itemWindow.setStatusWindow(this._statusWindow); // Conecta a janela de classes com a de status.
     this._itemWindow.setHandler("ok", this.onItemOk.bind(this));
     this._itemWindow.setHandler("cancel", this.popScene.bind(this));
     this._itemWindow.setHandler("pagedown", this.nextActor.bind(this));
@@ -1064,10 +1183,27 @@ Lazi_Scene_ClassChange.prototype.createItemWindow = function () {
 };
 
 Lazi_Scene_ClassChange.prototype.itemWindowRect = function () {
-    const wx = 0;
-    const wy = this._statusWindow.y + this._statusWindow.height;
-    const ww = Graphics.boxWidth;
-    const wh = this.mainAreaHeight() - this._statusWindow.height;
+    const layout = Lazi.ClassChange.getParam("sceneLayout");
+    let wx = 0;
+    let ww = Graphics.boxWidth;
+    let wh = 0; // Initialize wh
+    let wy = 0; // Initialize wy
+
+    switch (layout) {
+        case "statusLeft":
+            // Ajusta a largura e posição para acomodar a Window_EquipStatus.
+            ww = Graphics.boxWidth - 312;
+            wx = 312;
+            wh = this.mainAreaHeight();
+            wy = this.mainAreaTop();
+            break;
+        case "classLeft":
+            ww = Math.floor(Graphics.boxWidth / 2);
+            wh = this.mainAreaHeight();
+            wx = 0;
+            wy = this.mainAreaTop();
+            break;
+    }
     return new Rectangle(wx, wy, ww, wh);
 };
 
@@ -1082,6 +1218,7 @@ Lazi_Scene_ClassChange.prototype.arePageButtonsEnabled = function () {
 Lazi_Scene_ClassChange.prototype.refreshActor = function () {
     const actor = this.actor();
     this._statusWindow.setActor(actor);
+    this._statusWindow.setTempActor(null); // Limpa a pré-visualização ao trocar de ator.
     this._itemWindow.setActor(actor);
 };
 
@@ -1105,7 +1242,9 @@ Lazi_Scene_ClassChange.prototype.useItem = function () {
 
 Lazi_Scene_ClassChange.prototype.performClassSwap = function (item) {
     const actor = this.actor();
+    Lazi.ClassChange.payClassChangeCost(item.classID);
     Lazi.ClassChange.performClassSwap(actor, item.classID, item.classExp);
+    this._statusWindow.setTempActor(null); // Limpa a pré-visualização após a troca.
     this.useItem();
     this._itemWindow.startCooldownRefresh(); // Starts the cooldown refresh
 }
@@ -1113,14 +1252,21 @@ Lazi_Scene_ClassChange.prototype.performClassSwap = function (item) {
 Lazi_Scene_ClassChange.prototype.onActorChange = function () {
     // Chama a função base para atualizar o ator
     Scene_ItemBase.prototype.onActorChange.call(this);
+    this._statusWindow.setTempActor(null); // Limpa a pré-visualização ao trocar de ator.
     // Reativa a janela de lista de classes para que o controle não seja perdido
     this.refreshActor();
     this._itemWindow.activate(); // Reactivates the class list window so control is not lost
 };
 
 Lazi_Scene_ClassChange.prototype.onItemOk = function () {
+    if (!this._itemWindow.isCurrentItemEnabled()) {
+        this.playBuzzerSound();
+        return;
+    }
+
     if (Lazi.ClassChange.shouldShowConfirmation()) {
         this._confirmationWindow.open();
+        this._confirmationWindow.updateHelp();
         this._confirmationWindow.activate();
     } else {
         this.performClassSwap(this.item());
@@ -1138,6 +1284,7 @@ Lazi_Scene_ClassChange.prototype.onConfirmCancel = function() {
 
 Lazi_Scene_ClassChange.prototype.closeConfirmationWindow = function() {
     this._confirmationWindow.close();
+    this._helpWindow.clear();
     this._itemWindow.activate();
 };
 
@@ -1162,8 +1309,37 @@ Window_ClassChangeConfirm.prototype.initialize = function(rect) {
 };
 
 Window_ClassChangeConfirm.prototype.makeCommandList = function() {
-    this.addCommand("Sim", "yes");
-    this.addCommand("Não", "no");
+    this.addCommand(Lazi.ClassChange.getParam("confirmYesText"), "yes");
+    this.addCommand(Lazi.ClassChange.getParam("confirmNoText"), "no");
+};
+
+Window_ClassChangeConfirm.prototype.updateHelp = function() {
+    // Access the current scene via the SceneManager
+    const actorName = SceneManager._scene.actor().name();
+    let helpText = Lazi.ClassChange.getParam("confirmHelpText").format(actorName);
+    if (Lazi.ClassChange.isCooldownEnabled()) {
+        const cooldown = Lazi.ClassChange.getParam("cooldownDuration");
+        helpText += " " + Lazi.ClassChange.getParam("confirmHelpCooldownText").format(cooldown);
+    }
+    this._helpWindow.setText(helpText);
+};
+
+Window_ClassChangeConfirm.prototype.drawItem = function(index) {
+    const rect = this.itemLineRect(index);
+    const text = this.commandName(index);
+    this.resetTextColor();
+    this.changePaintOpacity(this.isCommandEnabled(index));
+
+    // Calculate X position to center the text, as drawTextEx doesn't have an alignment parameter.
+    // This is a more robust way to calculate width that avoids conflicts with other plugins.
+    const textWithoutCodes = text.replace(/\\I\[\d+\]/gi, "");
+    const iconCount = (text.match(/\\I\[\d+\]/gi) || []).length;
+    const textWidth = this.textWidth(textWithoutCodes) + (iconCount * ImageManager.iconWidth);
+    const x = rect.x + (rect.width - textWidth) / 2;
+
+
+    // Use drawTextEx to render text with icon support.
+    this.drawTextEx(text, x, rect.y, rect.width);
 };
 
 
@@ -1171,12 +1347,16 @@ Window_ClassList.prototype = Object.create(Window_Selectable.prototype);
 Window_ClassList.prototype.constructor = Window_ClassList;
 
 Window_ClassList.prototype.initialize = function (rect) {
+    this._data = [];
     Window_Selectable.prototype.initialize.call(this, rect);
     this._actor = null;
-    this._data = [];
     this._lastCooldownFrames = 0; // Tracks frames to know when to update
     this._lastCooldownSeconds = 0; // Tracks seconds to know when to redraw
     this._cooldownRefresh = false;
+};
+
+Window_ClassList.prototype.setStatusWindow = function(statusWindow) {
+    this._statusWindow = statusWindow;
 };
 
 Window_ClassList.prototype.setActor = function (actor) {
@@ -1195,7 +1375,7 @@ Window_ClassList.prototype.startCooldownRefresh = function() {
 };
 
 Window_ClassList.prototype.maxCols = function () {
-    return 2;
+    return Lazi.ClassChange.getParam("classColumns");
 };
 
 Window_ClassList.prototype.colSpacing = function () {
@@ -1230,6 +1410,10 @@ Window_ClassList.prototype.isEnabled = function (item) {
         return false;
     }
     if (Lazi.ClassChange.isCooldownEnabled() && this._actor.isClassChangeOnCooldown()) {
+        return false;
+    }
+    const costs = Lazi.ClassChange.getClassChangeCost(item.classID);
+    if (costs && !Lazi.ClassChange.canAffordCost(costs)) {
         return false;
     }
     return true;
@@ -1267,29 +1451,71 @@ Window_ClassList.prototype.drawItem = function (index) {
     const classData = this.itemAt(index);
     const classInfo = $dataClasses[classData.classID];
     if (classData && classInfo) {
+        const costs = Lazi.ClassChange.getClassChangeCost(classData.classID);
         const levelWidth = this.levelWidth();
         const rect = this.itemLineRect(index);
         this.changePaintOpacity(this.isEnabled(classData));
-        this.drawItemName({
-            name: classInfo.name,
-            iconIndex: Lazi.ClassChange.getClassIcon(classData.classID)
-        }, rect.x, rect.y, rect.width - levelWidth);
+        // A largura do nome é ajustada para deixar espaço para o nível e os custos.
+        const nameWidth = rect.width - this.levelWidth() - this.costWidth(costs);
+        this.drawItemName({ name: classInfo.name, iconIndex: Lazi.ClassChange.getClassIcon(classData.classID) }, rect.x, rect.y, nameWidth);
 
         // Check if we should draw cooldown or level
         if (this._actor.isClassChangeOnCooldown() && this._actor.currentClass().id !== classData.classID) {
             this.drawCooldownTime(this._actor, rect.x, rect.y, rect.width);
         } else if (Lazi.ClassChange.shouldShowLevels()) {
-            this.drawclassLevel(classData, rect.x, rect.y, rect.width);
+            // Desenha o nível e, em seguida, o custo ao lado dele.
+            this.drawClassLevelAndCost(classData, costs, rect.x, rect.y, rect.width);
         }
 
         this.changePaintOpacity(1);
     }
 };
 
+Window_ClassList.prototype.itemHeight = function() {
+    // A altura da linha volta ao normal, pois tudo está em uma única linha.
+    return this.lineHeight();
+};
+
+Window_ClassList.prototype.drawClassCost = function(costs, x, y, width) {
+    this.contents.fontSize = $gameSystem.mainFontSize() - 4;
+    let currentX = x + width; // Começa a desenhar a partir da posição final X fornecida.
+    const hasGold = $gameParty.gold() >= costs.gold;
+    this.changePaintOpacity(hasGold);
+
+    if (costs.gold > 0) {
+        const goldAmountText = String(costs.gold);
+        const amountWidth = this.textWidth(goldAmountText);
+
+        if (costs.goldIcon > 0) {
+            const iconWidth = ImageManager.iconWidth + 4;
+            currentX -= (amountWidth + iconWidth + 4); // Adiciona espaçamento extra
+            this.drawIcon(costs.goldIcon, currentX, y - (ImageManager.iconHeight - this.lineHeight()) / 2);
+            this.drawText(goldAmountText, currentX + iconWidth, y, amountWidth, "left");
+        } else {
+            const currencyText = " " + TextManager.currencyUnit;
+            const currencyWidth = this.textWidth(currencyText);
+            currentX -= (amountWidth + currencyWidth);
+            this.drawText(goldAmountText + currencyText, currentX, y, amountWidth + currencyWidth, "right");
+        }
+    }
+
+    costs.items.forEach(itemCost => {
+        const item = Lazi.ClassChange.getItemObject(itemCost);
+        const hasItem = $gameParty.numItems(item) >= itemCost.amount;
+        this.changePaintOpacity(hasItem);
+        const costText = "x" + itemCost.amount;
+        const textWidth = this.textWidth(costText) + ImageManager.iconWidth + 4;
+        currentX -= (textWidth + 4); // Adiciona espaçamento extra
+        this.drawText(costText, currentX + ImageManager.iconWidth + 4, y, this.textWidth(costText), "left");
+        this.drawIcon(item.iconIndex, currentX, y - (ImageManager.iconHeight - this.lineHeight()) / 2);
+    });
+    this.resetFontSettings();
+};
+
 Window_ClassList.prototype.drawCooldownTime = function(actor, x, y, width) {
     const remainingFrames = actor._classChangeCooldown || 0;
     const remainingSeconds = Math.ceil(remainingFrames / 60);
-    this.drawText(remainingSeconds + "s", x, y, width, "right");
+    this.drawText(remainingSeconds + " s", x, y, width, "right");
 };
 
 Window_ClassList.prototype.levelWidth = function () {
@@ -1300,19 +1526,79 @@ Window_ClassList.prototype.levelWidth = function () {
     }
 };
 
-Window_ClassList.prototype.drawclassLevel = function (classData, x, y, width) {
-    this.drawText("Lvl. " + Lazi.ClassChange.ClassLevelByExp(classData.classID, classData.classExp), x, y, width, "right");
+Window_ClassList.prototype.drawClassLevelAndCost = function (classData, costs, x, y, width) {
+    const levelText = "Lvl. " + Lazi.ClassChange.ClassLevelByExp(classData.classID, classData.classExp);
+    const levelWidth = this.textWidth(levelText);
+    const levelX = x + width - levelWidth;
+    
+    // Desenha o nível alinhado à direita.
+    this.drawText(levelText, levelX, y, levelWidth, "right");
+
+    // Se houver custos, desenha-os à esquerda do nível.
+    if (costs) {
+        const costStartX = levelX - 8; // Posição inicial para os custos, com um espaçamento.
+        this.drawClassCost(costs, 0, y, costStartX);
+    }
+};
+
+Window_ClassList.prototype.costWidth = function(costs) {
+    if (!costs) return 0;
+    let totalWidth = 0;
+    this.contents.fontSize = $gameSystem.mainFontSize() - 4;
+
+    if (costs.gold > 0) {
+        if (costs.goldIcon > 0) {
+            totalWidth += ImageManager.iconWidth + this.textWidth(String(costs.gold)) + 8;
+        } else {
+            totalWidth += this.textWidth(String(costs.gold) + " " + TextManager.currencyUnit) + 4;
+        }
+    }
+    costs.items.forEach(itemCost => {
+        totalWidth += ImageManager.iconWidth + this.textWidth("x" + itemCost.amount) + 8;
+    });
+    this.resetFontSettings();
+    return totalWidth;
 };
 
 Window_ClassList.prototype.updateHelp = function () {
-    if (this._actor)
-        this.setHelpWindowItem({
-            description: `Select the new class for ${this._actor.name()}.`
-        });
-    else
-        this.setHelpWindowItem({
-            description: ``
-        });
+    if (this._actor) {
+        const item = this.item();
+        const classInfo = item ? $dataClasses[item.classID] : null;
+        if (classInfo && classInfo.description) {
+            this._helpWindow.setText(classInfo.description);
+        } else {
+            const helpText = Lazi.ClassChange.getParam("selectClassHelpText").format(this._actor.name());
+            this.setHelpWindowItem({ description: helpText });
+        }
+    } else {
+        this.setHelpWindowItem({ description: "" });
+    }
+    this.updateStatus();
+};
+
+Window_ClassList.prototype.updateStatus = function() {
+    if (this._statusWindow) {
+        const item = this.item();
+        if (item && this.isEnabled(item)) {
+            const tempActor = JsonEx.makeDeepCopy(this._actor);
+            const newClassId = item.classID;
+            const levelSystem = Lazi.ClassChange.getParam("levelSystemType");
+
+            if (levelSystem === "singleLevel") {
+                tempActor.changeClass(newClassId, true);
+            } else {
+                const newClassExp = item.classExp;
+                const newLevel = Lazi.ClassChange.ClassLevelByExp(newClassId, newClassExp);
+                tempActor._classId = newClassId;
+                tempActor._level = newLevel;
+                tempActor.initSkills();
+                tempActor.refresh();
+            }
+            this._statusWindow.setTempActor(tempActor);
+        } else {
+            this._statusWindow.setTempActor(null);
+        }
+    }
 };
 
 Window_ClassList.prototype.refresh = function () {
@@ -1349,3 +1635,67 @@ Lazi.ClassChange.getClassIcon = function(classId) {
     if (match) return parseInt(match[1]);
     return 0; //Fallback to default icon if no notetag
 }
+
+Lazi.ClassChange.getClassChangeCost = function(classId) {
+    const classData = $dataClasses[classId];
+    if (!classData) return null;
+
+    const costs = { gold: 0, items: [], goldIcon: 0 };
+    const note = classData.note;
+
+    // Supports both <LaziClassCostGold: icon, amount> and <LaziClassCostGold: amount>
+    const goldMatch = note.match(/<\s*LaziClassCostGold\s*:\s*(\d+)\s*(?:,\s*(\d+))?\s*>/i);
+    if (goldMatch) {
+        if (goldMatch[2] !== undefined) { // Format: <icon, amount>
+            costs.goldIcon = parseInt(goldMatch[1], 10);
+            costs.gold = parseInt(goldMatch[2], 10);
+        } else { // Format: <amount>
+            costs.gold = parseInt(goldMatch[1], 10);
+        }
+    }
+
+    const itemMatches = note.matchAll(/<\s*LaziClassCostItem\s*:\s*(\d+)\s*,\s*(\d+)\s*>/ig);
+    for (const match of itemMatches) {
+        costs.items.push({ id: parseInt(match[1], 10), amount: parseInt(match[2], 10), type: 'item' });
+    }
+
+    const weaponMatches = note.matchAll(/<\s*LaziClassCostWeapon\s*:\s*(\d+)\s*,\s*(\d+)\s*>/ig);
+    for (const match of weaponMatches) {
+        costs.items.push({ id: parseInt(match[1], 10), amount: parseInt(match[2], 10), type: 'weapon' });
+    }
+
+    const armorMatches = note.matchAll(/<\s*LaziClassCostArmor\s*:\s*(\d+)\s*,\s*(\d+)\s*>/ig);
+    for (const match of armorMatches) {
+        costs.items.push({ id: parseInt(match[1], 10), amount: parseInt(match[2], 10), type: 'armor' });
+    }
+
+    return (costs.gold > 0 || costs.items.length > 0) ? costs : null;
+};
+
+Lazi.ClassChange.getItemObject = function(itemCost) {
+    const { id, type } = itemCost;
+    if (type === 'item') return $dataItems[id];
+    if (type === 'weapon') return $dataWeapons[id];
+    if (type === 'armor') return $dataArmors[id];
+    return null;
+};
+
+Lazi.ClassChange.canAffordCost = function(costs) {
+    if (costs.gold > $gameParty.gold()) {
+        return false;
+    }
+    return costs.items.every(itemCost => {
+        const item = this.getItemObject(itemCost);
+        return $gameParty.numItems(item) >= itemCost.amount;
+    });
+};
+
+Lazi.ClassChange.payClassChangeCost = function(classId) {
+    const costs = this.getClassChangeCost(classId);
+    if (!costs) return;
+    $gameParty.loseGold(costs.gold);
+    costs.items.forEach(itemCost => {
+        const item = this.getItemObject(itemCost);
+        $gameParty.loseItem(item, itemCost.amount, false);
+    });
+};
